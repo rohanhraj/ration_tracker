@@ -1,15 +1,22 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../store/DataContext';
 import { format } from 'date-fns';
-import { Calendar, Download, Trash2 } from 'lucide-react';
+import { Calendar, Download, Trash2, Search, AlertTriangle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const DailyReport: React.FC = () => {
-    const { getDailyReport, deleteTransaction } = useData();
+    const { getDailyReport, deleteTransaction, bulkDeleteTransactions } = useData();
     const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [cardSearch, setCardSearch] = useState('');
 
     const transactions = useMemo(() => getDailyReport(selectedDate), [getDailyReport, selectedDate]);
+    const filteredTransactions = useMemo(
+        () => cardSearch.trim() === ''
+            ? transactions
+            : transactions.filter(tx => tx.cardNo.toLowerCase().includes(cardSearch.trim().toLowerCase())),
+        [transactions, cardSearch]
+    );
 
     const totalRiceQty = transactions.filter(t => t.item === 'Rice').reduce((sum, t) => sum + t.quantity, 0);
     const totalRagiQty = transactions.filter(t => t.item === 'Ragi').reduce((sum, t) => sum + t.quantity, 0);
@@ -43,7 +50,17 @@ const DailyReport: React.FC = () => {
                     <p style={{ color: 'var(--text-muted)' }}>Overview of sales for a specific date.</p>
                 </div>
 
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div className="glass-panel" style={{ padding: '0.75rem 1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <Search size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                        <input
+                            type="text"
+                            placeholder="Search by Card No…"
+                            value={cardSearch}
+                            onChange={(e) => setCardSearch(e.target.value)}
+                            style={{ width: '160px', background: 'transparent', border: 'none', outline: 'none' }}
+                        />
+                    </div>
                     <div className="glass-panel" style={{ padding: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         <Calendar size={20} className="text-neon" />
                         <input
@@ -55,6 +72,26 @@ const DailyReport: React.FC = () => {
                     </div>
                     <button onClick={exportPDF} className="btn-primary" style={{ height: '100%' }}>
                         <Download size={20} /> Export PDF
+                    </button>
+                    <button
+                        onClick={() => {
+                            if (transactions.length === 0) return;
+                            if (window.confirm(`Delete ALL ${transactions.length} record(s) for ${selectedDate}? This cannot be undone.`)) {
+                                bulkDeleteTransactions(transactions.map(tx => tx.id));
+                            }
+                        }}
+                        disabled={transactions.length === 0}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '0.6rem 1rem', borderRadius: '8px', fontWeight: 600,
+                            background: transactions.length === 0 ? 'var(--glass-bg)' : 'rgba(239,68,68,0.15)',
+                            color: transactions.length === 0 ? 'var(--text-muted)' : 'var(--danger)',
+                            border: '1px solid', borderColor: transactions.length === 0 ? 'var(--border)' : 'rgba(239,68,68,0.4)',
+                            cursor: transactions.length === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                        }}
+                        title="Delete all records for this date"
+                    >
+                        <AlertTriangle size={16} /> Delete All
                     </button>
                 </div>
             </header>
@@ -87,14 +124,16 @@ const DailyReport: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {transactions.length === 0 ? (
+                        {filteredTransactions.length === 0 ? (
                             <tr>
                                 <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                                    No transactions recorded on this date.
+                                    {transactions.length === 0
+                                        ? 'No transactions recorded on this date.'
+                                        : `No records found for card "${cardSearch}".`}
                                 </td>
                             </tr>
                         ) : (
-                            transactions.map(tx => (
+                            filteredTransactions.map(tx => (
                                 <tr key={tx.id}>
                                     <td>{format(new Date(tx.date), 'HH:mm:ss')}</td>
                                     <td style={{ fontWeight: 600 }}>{tx.cardNo}</td>

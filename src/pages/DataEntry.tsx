@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../store/DataContext';
 import type { ItemType } from '../store/DataContext';
 import { format } from 'date-fns';
@@ -6,6 +6,29 @@ import { PlusCircle, Save, Trash2 } from 'lucide-react';
 
 const DataEntry: React.FC = () => {
     const { addTransaction, transactions, deleteTransaction } = useData();
+    const cardNoRef = useRef<HTMLInputElement>(null);
+
+    // Auto-focus Card No. on mount and whenever the browser tab/window becomes active
+    useEffect(() => {
+        const focusCardNo = () => cardNoRef.current?.focus();
+
+        // Defer slightly so the browser has settled after mount/refresh
+        const timer = setTimeout(focusCardNo, 100);
+
+        // Browser tab switched back (Ctrl+Tab / clicking tab)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') focusCardNo();
+        });
+
+        // Window regains focus from another app
+        window.addEventListener('focus', focusCardNo);
+
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('visibilitychange', focusCardNo);
+            window.removeEventListener('focus', focusCardNo);
+        };
+    }, []);
 
     // Current Entry State
     const [cardNo, setCardNo] = useState('');
@@ -43,6 +66,8 @@ const DataEntry: React.FC = () => {
         // Reset simple fields, keep date and item for convenience
         setCardNo('');
         setUnit('');
+        // Return focus to Card No. ready for next entry
+        setTimeout(() => cardNoRef.current?.focus(), 0);
     };
 
     const handleCreate = (e: React.FormEvent) => {
@@ -81,6 +106,7 @@ const DataEntry: React.FC = () => {
                     <div>
                         <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Card No.</label>
                         <input
+                            ref={cardNoRef}
                             type="text"
                             value={cardNo}
                             onChange={handleCardNoChange}

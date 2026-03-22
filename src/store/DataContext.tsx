@@ -16,6 +16,7 @@ interface DataContextType {
   transactions: Transaction[];
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
   deleteTransaction: (id: string) => void;
+  bulkDeleteTransactions: (ids: string[]) => void;
   getDailyReport: (dateString: string) => Transaction[];
   getMonthlyReport: (monthString: string) => Transaction[];
 }
@@ -54,6 +55,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTransactions(prev => prev.filter(t => t.id !== id));
   };
 
+  const bulkDeleteTransactions = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setTransactions(prev => prev.filter(t => !idSet.has(t.id)));
+  };
+
   const getDailyReport = (dateString: string) => {
     // dateString should be YYYY-MM-DD
     return transactions.filter(t => t.date.startsWith(dateString));
@@ -69,6 +75,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       transactions,
       addTransaction,
       deleteTransaction,
+      bulkDeleteTransactions,
       getDailyReport,
       getMonthlyReport
     }}>
