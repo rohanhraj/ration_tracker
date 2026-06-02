@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { pool, initDb } from './db';
+import { pool, initDb } from './db.js';
 
 const app = express();
 app.use(cors());
