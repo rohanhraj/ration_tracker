@@ -1,8 +1,10 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Calendar, History, Store } from 'lucide-react';
+import { LayoutDashboard, Calendar, History, Store, RefreshCw } from 'lucide-react';
+import { useData } from '../store/DataContext';
 
 const Sidebar: React.FC = () => {
+    const { isOnline, loading } = useData();
     const linkStyle = ({ isActive }: { isActive: boolean }) => ({
         display: 'flex',
         alignItems: 'center',
@@ -58,8 +60,25 @@ const Sidebar: React.FC = () => {
             </nav>
 
             <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--panel-border)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                System v1.0 <br />
-                Offline Mode Active
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    {loading ? (
+                        <>
+                            <RefreshCw size={14} className="text-neon" style={{ animation: 'spin 1.5s linear infinite' }} />
+                            <span>Syncing...</span>
+                        </>
+                    ) : isOnline ? (
+                        <>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }}></span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Online (Neon DB)</span>
+                        </>
+                    ) : (
+                        <>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }}></span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Offline Mode</span>
+                        </>
+                    )}
+                </div>
+                System v1.0
             </div>
         </aside>
     );

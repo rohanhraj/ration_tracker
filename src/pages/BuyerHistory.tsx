@@ -1,7 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../store/DataContext';
 import { format } from 'date-fns';
-import { Search, User, Trash2 } from 'lucide-react';
+import { Search, User, Trash2, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { exportToExcel } from '../utils/exportUtils';
 
 const BuyerHistory: React.FC = () => {
     const { transactions, deleteTransaction } = useData();
@@ -14,6 +17,41 @@ const BuyerHistory: React.FC = () => {
 
     const totalRiceQty = filteredTransactions.filter(t => t.item === 'Rice').reduce((sum, t) => sum + t.quantity, 0);
     const totalRagiQty = filteredTransactions.filter(t => t.item === 'Ragi').reduce((sum, t) => sum + t.quantity, 0);
+
+    const exportPDF = () => {
+        if (filteredTransactions.length === 0) return;
+        const doc = new jsPDF();
+        doc.text(`Buyer Ration History - Card No: ${search}`, 14, 15);
+
+        autoTable(doc, {
+            startY: 20,
+            head: [['System Date', 'Issue Date', 'Item', 'Unit', 'Qty']],
+            body: filteredTransactions.map(tx => [
+                format(new Date(tx.date), 'MMM dd yyyy, HH:mm'),
+                tx.issueDate,
+                tx.item,
+                tx.unit,
+                tx.quantity
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [56, 189, 248] },
+        });
+
+        doc.save(`buyer_history_${search}.pdf`);
+    };
+
+    const exportExcel = () => {
+        if (filteredTransactions.length === 0) return;
+        const excelData = filteredTransactions.map(tx => ({
+            'System Date': format(new Date(tx.date), 'yyyy-MM-dd HH:mm'),
+            'Issue Date': tx.issueDate,
+            'Card No': search,
+            'Item': tx.item,
+            'Unit': tx.unit,
+            'Qty (kg)': tx.quantity,
+        }));
+        exportToExcel(excelData, `buyer_history_${search}`, 'Buyer History');
+    };
 
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -35,6 +73,20 @@ const BuyerHistory: React.FC = () => {
 
             {search.trim() !== '' && (
                 <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <h3 className="heading-md" style={{ margin: 0 }}>Search Results</h3>
+                        {filteredTransactions.length > 0 && (
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={exportPDF} className="btn-primary" style={{ background: 'rgba(56, 189, 248, 0.1)', color: 'var(--accent-neon)', border: '1px solid var(--accent-neon)', boxShadow: 'none' }}>
+                                    <Download size={18} /> Export PDF
+                                </button>
+                                <button onClick={exportExcel} className="btn-primary">
+                                    <Download size={18} /> Export Excel
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
                         <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

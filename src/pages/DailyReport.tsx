@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Calendar, Download, Trash2, Search, AlertTriangle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { exportToExcel } from '../utils/exportUtils';
 
 const DailyReport: React.FC = () => {
     const { getDailyReport, deleteTransaction, bulkDeleteTransactions } = useData();
@@ -42,6 +43,18 @@ const DailyReport: React.FC = () => {
         doc.save(`daily_report_${selectedDate}.pdf`);
     };
 
+    const exportExcel = () => {
+        const excelData = transactions.map(tx => ({
+            'Time': format(new Date(tx.date), 'HH:mm:ss'),
+            'Card No': tx.cardNo,
+            'Item': tx.item,
+            'Unit': tx.unit,
+            'Qty (kg)': tx.quantity,
+            'Issue Date': tx.issueDate,
+        }));
+        exportToExcel(excelData, `daily_report_${selectedDate}`, 'Daily Report');
+    };
+
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
             <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -70,8 +83,11 @@ const DailyReport: React.FC = () => {
                             style={{ width: 'auto' }}
                         />
                     </div>
-                    <button onClick={exportPDF} className="btn-primary" style={{ height: '100%' }}>
+                    <button onClick={exportPDF} className="btn-primary" style={{ height: '100%', background: 'rgba(56, 189, 248, 0.1)', color: 'var(--accent-neon)', border: '1px solid var(--accent-neon)', boxShadow: 'none' }}>
                         <Download size={20} /> Export PDF
+                    </button>
+                    <button onClick={exportExcel} className="btn-primary" style={{ height: '100%' }}>
+                        <Download size={20} /> Export Excel
                     </button>
                     <button
                         onClick={() => {
