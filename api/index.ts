@@ -119,6 +119,55 @@ app.post('/api/transactions/delete-bulk', async (req, res) => {
   }
 });
 
+// POST /api/transactions/sync - Sync local transactions to database
+app.post('/api/transactions/sync', async (req, res) => {
+  const { transactions } = req.body;
+  if (!Array.isArray(transactions)) {
+    return res.status(400).json({ error: 'transactions array is required' });
+  }
+  
+  if (transactions.length === 0) {
+    return res.json({ success: true, syncedCount: 0 });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const query = `
+      INSERT INTO transactions (id, card_no, unit, quantity, date, issue_date, item)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (id) DO NOTHING
+    `;
+    
+    let syncedCount = 0;
+    for (const tx of transactions) {
+      const result = await client.query(query, [
+        tx.id,
+        tx.cardNo,
+        tx.unit,
+        tx.quantity,
+        tx.date,
+        tx.issueDate,
+        tx.item
+      ]);
+      if (result.rowCount && result.rowCount > 0) {
+        syncedCount++;
+      }
+    }
+    
+    await client.query('COMMIT');
+    res.json({ success: true, syncedCount });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    const error = err as Error;
+    console.error('Error syncing transactions:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // For local running
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3001;

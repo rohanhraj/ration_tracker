@@ -34,13 +34,43 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
+        // 1. Get transactions from LocalStorage first (if any)
+        const saved = localStorage.getItem('ration_transactions');
+        let localTxs: Transaction[] = [];
+        if (saved) {
+          try {
+            localTxs = JSON.parse(saved);
+          } catch (e) {
+            console.error('Failed to parse local transactions', e);
+          }
+        }
+
+        // 2. Try to sync local transactions to DB (if we have any)
+        if (localTxs.length > 0) {
+          try {
+            const syncRes = await fetch('/api/transactions/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ transactions: localTxs }),
+            });
+            if (!syncRes.ok) {
+              console.warn('Failed to sync offline transactions during startup');
+            }
+          } catch (syncErr) {
+            console.warn('Sync request failed, likely offline:', syncErr);
+          }
+        }
+
+        // 3. Fetch up-to-date transactions from the DB
         const res = await fetch('/api/transactions');
         if (!res.ok) throw new Error('Database server error');
-        const data = await res.json();
-        setTransactions(data);
+        const dbData = await res.json();
+        setTransactions(dbData);
         setIsOnline(true);
         // Sync database state to LocalStorage so it is cached for offline use
-        localStorage.setItem('ration_transactions', JSON.stringify(data));
+        localStorage.setItem('ration_transactions', JSON.stringify(dbData));
       } catch (err) {
         console.warn('Failed to connect to Neon database. Operating in offline mode.', err);
         setIsOnline(false);
