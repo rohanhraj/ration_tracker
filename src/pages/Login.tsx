@@ -6,7 +6,7 @@ import { useData } from '../store/DataContext';
 
 const Login = () => {
   const { login, user, authLoading } = useData();
-  const [username, setUsername] = useState('123456');
+  const [username, setUsername] = useState('mahesh123');
   const [password, setPassword] = useState('Mahesh@123');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -70,7 +70,7 @@ const Login = () => {
         </form>
 
         <div className="login-help">
-          <span>Owner: 123456 / Mahesh@123</span>
+          <span>Owner: mahesh123 / Mahesh@123</span>
           <span>Worker: 123456 / 123456</span>
         </div>
       </div>

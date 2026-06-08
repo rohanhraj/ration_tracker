@@ -29,7 +29,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'local-ration-shop-session-
 
 const users: Array<SessionUser & { password: string }> = [
   {
-    username: process.env.OWNER_USER || '123456',
+    username: process.env.OWNER_USER || 'mahesh123',
     password: process.env.OWNER_PASSWORD || 'Mahesh@123',
     role: 'owner',
   },
