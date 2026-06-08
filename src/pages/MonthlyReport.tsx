@@ -1,181 +1,256 @@
-import React, { useState, useMemo } from 'react';
-import { useData } from '../store/DataContext';
-import { format } from 'date-fns';
-import { Calendar, Download, Trash2, Search, AlertTriangle } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, Search, Trash2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useData } from '../store/DataContext';
+import type { InventorySnapshot, IssueStatus, RationIssue } from '../store/DataContext';
 import { exportToExcel } from '../utils/exportUtils';
+import { formatDateTime, formatKg, getCurrentMonth } from '../utils/format';
 
-const MonthlyReport: React.FC = () => {
-    const { getMonthlyReport, deleteTransaction, bulkDeleteTransactions } = useData();
-    const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
-    const [cardSearch, setCardSearch] = useState('');
+const emptyInventory = (month: string): InventorySnapshot => ({
+  month,
+  riceTotalKg: 0,
+  ragiTotalKg: 0,
+  riceDistributedKg: 0,
+  ragiDistributedKg: 0,
+  riceRemainingKg: 0,
+  ragiRemainingKg: 0,
+  distributedCount: 0,
+});
 
-    const transactions = useMemo(() => getMonthlyReport(selectedMonth), [getMonthlyReport, selectedMonth]);
-    const filteredTransactions = useMemo(
-        () => cardSearch.trim() === ''
-            ? transactions
-            : transactions.filter(tx => tx.cardNo.toLowerCase().includes(cardSearch.trim().toLowerCase())),
-        [transactions, cardSearch]
-    );
+const MonthlyReport = () => {
+  const { fetchIssues, fetchInventory, clearIssuesForMonth } = useData();
+  const [month, setMonth] = useState(getCurrentMonth());
+  const [status, setStatus] = useState<IssueStatus | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const [issues, setIssues] = useState<RationIssue[]>([]);
+  const [inventory, setInventory] = useState<InventorySnapshot>(emptyInventory(month));
+  const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
-    const totalRiceQty = transactions.filter(t => t.item === 'Rice').reduce((sum, t) => sum + t.quantity, 0);
-    const totalRagiQty = transactions.filter(t => t.item === 'Ragi').reduce((sum, t) => sum + t.quantity, 0);
+  const filteredIssues = useMemo(() => {
+    if (!search.trim()) return issues;
+    return issues.filter(issue => issue.cardNo.includes(search.trim()));
+  }, [issues, search]);
 
-    const exportPDF = () => {
-        const doc = new jsPDF();
-        doc.text(`Monthly Ration Report - ${selectedMonth}`, 14, 15);
+  const totals = useMemo(
+    () => ({
+      issuedRice: issues.reduce((sum, issue) => sum + issue.riceKg, 0),
+      issuedRagi: issues.reduce((sum, issue) => sum + issue.ragiKg, 0),
+      distributedCards: issues.filter(issue => issue.status === 'distributed').length,
+      pendingCards: issues.filter(issue => issue.status === 'issued').length,
+    }),
+    [issues]
+  );
 
-        autoTable(doc, {
-            startY: 20,
-            head: [['System Date', 'Issue Date', 'Card No', 'Item', 'Unit', 'Qty']],
-            body: transactions.map(tx => [
-                format(new Date(tx.date), 'MMM dd, HH:mm'),
-                tx.issueDate,
-                tx.cardNo,
-                tx.item,
-                tx.unit,
-                tx.quantity
-            ]),
-            theme: 'striped',
-            headStyles: { fillColor: [56, 189, 248] },
-        });
+  const loadReport = useCallback(async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const [issueData, inventoryData] = await Promise.all([
+          fetchIssues(month, status === 'all' ? undefined : status),
+          fetchInventory(month),
+        ]);
+        setIssues(issueData);
+        setInventory(inventoryData);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load monthly report');
+      } finally {
+        setLoading(false);
+      }
+    }, [fetchInventory, fetchIssues, month, status]);
 
-        doc.save(`monthly_report_${selectedMonth}.pdf`);
-    };
+  useEffect(() => {
+    loadReport();
+  }, [loadReport]);
 
-    const exportExcel = () => {
-        const excelData = transactions.map(tx => ({
-            'System Date': format(new Date(tx.date), 'yyyy-MM-dd HH:mm'),
-            'Issue Date': tx.issueDate,
-            'Card No': tx.cardNo,
-            'Item': tx.item,
-            'Unit': tx.unit,
-            'Qty (kg)': tx.quantity,
-        }));
-        exportToExcel(excelData, `monthly_report_${selectedMonth}`, 'Monthly Report');
-    };
+  const reportRows = filteredIssues.map(issue => ({
+    'Card No': issue.cardNo,
+    Status: issue.status,
+    Unit: issue.unit,
+    'Rice kg': issue.riceKg,
+    'Ragi kg': issue.ragiKg,
+    'Issued At': formatDateTime(issue.issuedAt),
+    'Distributed At': formatDateTime(issue.distributedAt),
+  }));
 
-    return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-            <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 className="heading-lg">Monthly Report</h2>
-                    <p style={{ color: 'var(--text-muted)' }}>Aggregated data based on Issue Date.</p>
-                </div>
+  const exportExcel = () => {
+    exportToExcel(reportRows, `monthly_ration_report_${month}`, 'Monthly Report');
+  };
 
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div className="glass-panel" style={{ padding: '0.75rem 1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <Search size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                        <input
-                            type="text"
-                            placeholder="Search by Card No…"
-                            value={cardSearch}
-                            onChange={(e) => setCardSearch(e.target.value)}
-                            style={{ width: '160px', background: 'transparent', border: 'none', outline: 'none' }}
-                        />
-                    </div>
-                    <div className="glass-panel" style={{ padding: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        <Calendar size={20} className="text-neon" />
-                        <input
-                            type="month"
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(e.target.value)}
-                            style={{ width: 'auto' }}
-                        />
-                    </div>
-                    <button onClick={exportPDF} className="btn-primary" style={{ height: '100%', background: 'rgba(56, 189, 248, 0.1)', color: 'var(--accent-neon)', border: '1px solid var(--accent-neon)', boxShadow: 'none' }}>
-                        <Download size={20} /> Export PDF
-                    </button>
-                    <button onClick={exportExcel} className="btn-primary" style={{ height: '100%' }}>
-                        <Download size={20} /> Export Excel
-                    </button>
-                    <button
-                        onClick={() => {
-                            if (transactions.length === 0) return;
-                            if (window.confirm(`Delete ALL ${transactions.length} record(s) for ${selectedMonth}? This cannot be undone.`)) {
-                                bulkDeleteTransactions(transactions.map(tx => tx.id));
-                            }
-                        }}
-                        disabled={transactions.length === 0}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            padding: '0.6rem 1rem', borderRadius: '8px', fontWeight: 600,
-                            background: transactions.length === 0 ? 'var(--glass-bg)' : 'rgba(239,68,68,0.15)',
-                            color: transactions.length === 0 ? 'var(--text-muted)' : 'var(--danger)',
-                            border: '1px solid', borderColor: transactions.length === 0 ? 'var(--border)' : 'rgba(239,68,68,0.4)',
-                            cursor: transactions.length === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-                        }}
-                        title="Delete all records for this month"
-                    >
-                        <AlertTriangle size={16} /> Delete All
-                    </button>
-                </div>
-            </header>
+  const exportPDF = () => {
+    if (reportRows.length === 0) return;
+    const doc = new jsPDF();
+    doc.text(`Monthly Ration Report - ${month}`, 14, 15);
+    autoTable(doc, {
+      startY: 22,
+      head: [['Card No', 'Status', 'Unit', 'Rice kg', 'Ragi kg', 'Issued', 'Distributed']],
+      body: filteredIssues.map(issue => [
+        issue.cardNo,
+        issue.status,
+        issue.unit,
+        issue.riceKg,
+        issue.ragiKg,
+        formatDateTime(issue.issuedAt),
+        formatDateTime(issue.distributedAt),
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 99, 205] },
+    });
+    doc.save(`monthly_ration_report_${month}.pdf`);
+  };
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
-                <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-neon)' }}>
-                    <h4 style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500 }}>Monthly Rice Sold</h4>
-                    <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{totalRiceQty} <span style={{ fontSize: '1rem', fontWeight: 400, color: 'var(--text-muted)' }}>kg</span></div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--danger)' }}>
-                    <h4 style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500 }}>Monthly Ragi Sold</h4>
-                    <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{totalRagiQty} <span style={{ fontSize: '1rem', fontWeight: 400, color: 'var(--text-muted)' }}>kg</span></div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--success)' }}>
-                    <h4 style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500 }}>Total Transactions</h4>
-                    <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{transactions.length}</div>
-                </div>
-            </div>
+  const handleClearMonth = async () => {
+    if (issues.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete all ${issues.length} issued/distributed record(s) for ${month}? Card holders and stock entries will remain.`
+      )
+    ) {
+      return;
+    }
 
-            <div className="glass-panel table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>System Date</th>
-                            <th>Issue Date</th>
-                            <th>Card No</th>
-                            <th>Item</th>
-                            <th>Unit</th>
-                            <th>Qty</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredTransactions.length === 0 ? (
-                            <tr>
-                                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                                    {transactions.length === 0
-                                        ? 'No transactions recorded for this issue month.'
-                                        : `No records found for card "${cardSearch}".`}
-                                </td>
-                            </tr>
-                        ) : (
-                            filteredTransactions.map(tx => (
-                                <tr key={tx.id}>
-                                    <td>{format(new Date(tx.date), 'MMM dd, HH:mm')}</td>
-                                    <td>{tx.issueDate}</td>
-                                    <td style={{ fontWeight: 600 }}>{tx.cardNo}</td>
-                                    <td>{tx.item}</td>
-                                    <td>{tx.unit}</td>
-                                    <td>{tx.quantity}</td>
-                                    <td style={{ textAlign: 'right' }}>
-                                        <button
-                                            onClick={() => { if (window.confirm('Delete this record?')) deleteTransaction(tx.id) }}
-                                            style={{ color: 'var(--danger)', padding: '0.25rem' }}
-                                            title="Delete Entry"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
+    setClearing(true);
+    setError('');
+    setMessage('');
+    try {
+      const deletedCount = await clearIssuesForMonth(month);
+      setMessage(`Cleared ${deletedCount} issue record(s) for ${month}.`);
+      await loadReport();
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : 'Unable to clear monthly issues');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <div className="page">
+      <header className="page-header">
+        <div>
+          <h2>Monthly Report</h2>
+          <p>Review issued and distributed ration records for a selected month.</p>
         </div>
-    );
+        <div className="report-actions">
+          <button
+            type="button"
+            className="btn-danger"
+            onClick={handleClearMonth}
+            disabled={issues.length === 0 || clearing}
+          >
+            <Trash2 size={17} />
+            {clearing ? 'Clearing...' : 'Clear Month'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={exportPDF} disabled={reportRows.length === 0}>
+            <Download size={17} />
+            PDF
+          </button>
+          <button type="button" className="btn-primary" onClick={exportExcel} disabled={reportRows.length === 0}>
+            <Download size={17} />
+            Excel
+          </button>
+        </div>
+      </header>
+
+      <section className="metric-grid">
+        <div className="metric-card rice">
+          <span>Rice issued</span>
+          <strong>{formatKg(totals.issuedRice)}</strong>
+        </div>
+        <div className="metric-card ragi">
+          <span>Ragi issued</span>
+          <strong>{formatKg(totals.issuedRagi)}</strong>
+        </div>
+        <div className="metric-card rice">
+          <span>Rice remaining</span>
+          <strong>{formatKg(inventory.riceRemainingKg)}</strong>
+        </div>
+        <div className="metric-card ragi">
+          <span>Ragi remaining</span>
+          <strong>{formatKg(inventory.ragiRemainingKg)}</strong>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="toolbar">
+          <div className="month-picker inline">
+            <label>Month</label>
+            <input type="month" value={month} onChange={event => setMonth(event.target.value)} />
+          </div>
+          <div>
+            <label>Status</label>
+            <select value={status} onChange={event => setStatus(event.target.value as IssueStatus | 'all')}>
+              <option value="all">All</option>
+              <option value="issued">Issued</option>
+              <option value="distributed">Distributed</option>
+            </select>
+          </div>
+          <div className="input-with-icon search-wide">
+            <Search size={18} />
+            <input
+              type="text"
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Search card number"
+            />
+          </div>
+        </div>
+
+        <div className="summary-strip">
+          <span>{totals.pendingCards} pending</span>
+          <span>{totals.distributedCards} distributed</span>
+          <span>{issues.length} total records</span>
+        </div>
+
+        {message && <div className="alert success">{message}</div>}
+        {error && <div className="alert danger">{error}</div>}
+
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Card No</th>
+                <th>Status</th>
+                <th>Unit</th>
+                <th>Rice kg</th>
+                <th>Ragi kg</th>
+                <th>Issued</th>
+                <th>Distributed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredIssues.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="empty-cell">
+                    {loading ? 'Loading report...' : 'No records found.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredIssues.map(issue => (
+                  <tr key={issue.id}>
+                    <td>
+                      <strong>{issue.cardNo}</strong>
+                      <span className="muted block">{issue.cardType}</span>
+                    </td>
+                    <td>
+                      <span className={`status-pill ${issue.status}`}>{issue.status}</span>
+                    </td>
+                    <td>{issue.unit}</td>
+                    <td>{formatKg(issue.riceKg)}</td>
+                    <td>{formatKg(issue.ragiKg)}</td>
+                    <td>{formatDateTime(issue.issuedAt)}</td>
+                    <td>{formatDateTime(issue.distributedAt)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
 };
 
 export default MonthlyReport;

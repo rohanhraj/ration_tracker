@@ -1,220 +1,271 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-export type ItemType = 'Rice' | 'Ragi';
+export type Role = 'owner' | 'worker';
+export type IssueStatus = 'issued' | 'distributed';
 
-export interface Transaction {
+export interface AuthUser {
+  username: string;
+  role: Role;
+}
+
+export interface CardHolder {
+  cardNo: string;
+  cardType: string;
+  isActive: boolean;
+}
+
+export interface InventorySnapshot {
+  month: string;
+  riceTotalKg: number;
+  ragiTotalKg: number;
+  riceDistributedKg: number;
+  ragiDistributedKg: number;
+  riceRemainingKg: number;
+  ragiRemainingKg: number;
+  distributedCount: number;
+}
+
+export interface RationIssue {
   id: string;
   cardNo: string;
+  month: string;
   unit: number;
-  quantity: number;
-  date: string; // ISO format
-  issueDate: string; // YYYY-MM-DD format
-  item: ItemType;
+  riceKg: number;
+  ragiKg: number;
+  status: IssueStatus;
+  issuedAt: string;
+  issuedBy: string;
+  distributedAt: string | null;
+  distributedBy: string | null;
+  cardType: string;
+}
+
+export interface IssueInput {
+  cardNo: string;
+  month: string;
+  unit: number;
+  riceKg: number;
+  ragiKg: number;
+}
+
+export interface CardHolderInput {
+  cardNo: string;
+  cardType: string;
+  isActive: boolean;
+}
+
+export interface InventoryInput {
+  riceAmount: number;
+  riceMeasure: 'kg' | 'quintal';
+  ragiAmount: number;
+  ragiMeasure: 'kg' | 'quintal';
+}
+
+interface IssueResponse {
+  issue: RationIssue;
+  duplicateWarning: boolean;
+}
+
+interface DistributionResponse {
+  issue: RationIssue;
 }
 
 interface DataContextType {
-  transactions: Transaction[];
+  user: AuthUser | null;
+  authLoading: boolean;
   isOnline: boolean;
-  loading: boolean;
-  addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
-  deleteTransaction: (id: string) => Promise<void>;
-  bulkDeleteTransactions: (ids: string[]) => Promise<void>;
-  getDailyReport: (dateString: string) => Transaction[];
-  getMonthlyReport: (monthString: string) => Transaction[];
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  fetchCardHolders: (search?: string, includeInactive?: boolean) => Promise<CardHolder[]>;
+  getCardHolder: (cardNo: string) => Promise<CardHolder>;
+  createCardHolder: (card: CardHolderInput) => Promise<CardHolder>;
+  updateCardHolder: (originalCardNo: string, card: CardHolderInput) => Promise<CardHolder>;
+  fetchInventory: (month: string) => Promise<InventorySnapshot>;
+  saveInventory: (month: string, input: InventoryInput) => Promise<InventorySnapshot>;
+  fetchIssues: (month: string, status?: IssueStatus, cardNo?: string) => Promise<RationIssue[]>;
+  fetchIssueHistory: (cardNo: string) => Promise<RationIssue[]>;
+  createIssue: (input: IssueInput) => Promise<IssueResponse>;
+  updateIssue: (id: string, input: IssueInput) => Promise<IssueResponse>;
+  deleteIssue: (id: string) => Promise<void>;
+  clearIssuesForMonth: (month: string) => Promise<number>;
+  distributeIssue: (id: string) => Promise<DistributionResponse>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+const apiRequest = async <T,>(url: string, options: RequestInit = {}): Promise<T> => {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers,
+    },
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Request failed');
+  }
+
+  return data as T;
+};
+
+const withQuery = (base: string, params: Record<string, string | undefined>) => {
+  const url = new URL(base, window.location.origin);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) url.searchParams.set(key, value);
+  });
+  return `${url.pathname}${url.search}`;
+};
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isOnline, setIsOnline] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
 
-  // Load from database on mount, fall back to LocalStorage if offline
   useEffect(() => {
-    const fetchTransactions = async () => {
+    const loadUser = async () => {
       try {
-        // 1. Get transactions from LocalStorage first (if any)
-        const saved = localStorage.getItem('ration_transactions');
-        let localTxs: Transaction[] = [];
-        if (saved) {
-          try {
-            localTxs = JSON.parse(saved);
-          } catch (e) {
-            console.error('Failed to parse local transactions', e);
-          }
-        }
-
-        // 2. Try to sync local transactions to DB (if we have any)
-        if (localTxs.length > 0) {
-          try {
-            const syncRes = await fetch('/api/transactions/sync', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ transactions: localTxs }),
-            });
-            if (!syncRes.ok) {
-              console.warn('Failed to sync offline transactions during startup');
-            }
-          } catch (syncErr) {
-            console.warn('Sync request failed, likely offline:', syncErr);
-          }
-        }
-
-        // 3. Fetch up-to-date transactions from the DB
-        const res = await fetch('/api/transactions');
-        if (!res.ok) throw new Error('Database server error');
-        const dbData = await res.json();
-        setTransactions(dbData);
+        const data = await apiRequest<{ user: AuthUser | null }>('/api/auth/me');
+        setUser(data.user);
         setIsOnline(true);
-        // Sync database state to LocalStorage so it is cached for offline use
-        localStorage.setItem('ration_transactions', JSON.stringify(dbData));
-      } catch (err) {
-        console.warn('Failed to connect to Neon database. Operating in offline mode.', err);
+      } catch (error) {
+        console.warn('Unable to reach the ration API:', error);
         setIsOnline(false);
-        const saved = localStorage.getItem('ration_transactions');
-        if (saved) {
-          try {
-            setTransactions(JSON.parse(saved));
-          } catch (e) {
-            console.error('Failed to parse transactions from LocalStorage', e);
-          }
-        }
       } finally {
-        setLoading(false);
+        setAuthLoading(false);
       }
     };
 
-    fetchTransactions();
+    loadUser();
   }, []);
 
-  const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
-    const newTx: Transaction = {
-      ...tx,
-      id: crypto.randomUUID(),
-    };
-
-    if (isOnline) {
-      try {
-        const res = await fetch('/api/transactions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(newTx),
-        });
-        if (res.ok) {
-          const savedTx = await res.json();
-          setTransactions(prev => {
-            const updated = [savedTx, ...prev];
-            localStorage.setItem('ration_transactions', JSON.stringify(updated));
-            return updated;
-          });
-          return;
-        } else {
-          throw new Error('Failed to post transaction to server');
-        }
-      } catch (err) {
-        console.error('Database save failed, falling back to LocalStorage', err);
-        setIsOnline(false);
-      }
-    }
-
-    // Offline / Fallback flow
-    setTransactions(prev => {
-      const updated = [newTx, ...prev];
-      localStorage.setItem('ration_transactions', JSON.stringify(updated));
-      return updated;
+  const login = useCallback(async (username: string, password: string) => {
+    const data = await apiRequest<{ user: AuthUser }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
     });
-  };
+    setUser(data.user);
+    setIsOnline(true);
+  }, []);
 
-  const deleteTransaction = async (id: string) => {
-    if (isOnline) {
-      try {
-        const res = await fetch(`/api/transactions/${id}`, {
-          method: 'DELETE',
-        });
-        if (res.ok) {
-          setTransactions(prev => {
-            const updated = prev.filter(t => t.id !== id);
-            localStorage.setItem('ration_transactions', JSON.stringify(updated));
-            return updated;
-          });
-          return;
-        } else {
-          throw new Error('Failed to delete transaction on server');
-        }
-      } catch (err) {
-        console.error('Database delete failed, falling back to LocalStorage', err);
-        setIsOnline(false);
-      }
-    }
+  const logout = useCallback(async () => {
+    await apiRequest<{ success: boolean }>('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+  }, []);
 
-    // Offline / Fallback flow
-    setTransactions(prev => {
-      const updated = prev.filter(t => t.id !== id);
-      localStorage.setItem('ration_transactions', JSON.stringify(updated));
-      return updated;
+  const fetchCardHolders = useCallback(async (search = '', includeInactive = false) => {
+    return apiRequest<CardHolder[]>(
+      withQuery('/api/card-holders', {
+        search,
+        includeInactive: includeInactive ? 'true' : undefined,
+        limit: '80',
+      })
+    );
+  }, []);
+
+  const getCardHolder = useCallback(async (cardNo: string) => {
+    return apiRequest<CardHolder>(`/api/card-holders/${encodeURIComponent(cardNo)}`);
+  }, []);
+
+  const createCardHolder = useCallback(async (card: CardHolderInput) => {
+    return apiRequest<CardHolder>('/api/card-holders', {
+      method: 'POST',
+      body: JSON.stringify(card),
     });
-  };
+  }, []);
 
-  const bulkDeleteTransactions = async (ids: string[]) => {
-    if (isOnline) {
-      try {
-        const res = await fetch('/api/transactions/delete-bulk', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ids }),
-        });
-        if (res.ok) {
-          const idSet = new Set(ids);
-          setTransactions(prev => {
-            const updated = prev.filter(t => !idSet.has(t.id));
-            localStorage.setItem('ration_transactions', JSON.stringify(updated));
-            return updated;
-          });
-          return;
-        } else {
-          throw new Error('Failed to bulk delete transactions on server');
-        }
-      } catch (err) {
-        console.error('Database bulk delete failed, falling back to LocalStorage', err);
-        setIsOnline(false);
-      }
-    }
-
-    // Offline / Fallback flow
-    const idSet = new Set(ids);
-    setTransactions(prev => {
-      const updated = prev.filter(t => !idSet.has(t.id));
-      localStorage.setItem('ration_transactions', JSON.stringify(updated));
-      return updated;
+  const updateCardHolder = useCallback(async (originalCardNo: string, card: CardHolderInput) => {
+    return apiRequest<CardHolder>(`/api/card-holders/${encodeURIComponent(originalCardNo)}`, {
+      method: 'PUT',
+      body: JSON.stringify(card),
     });
-  };
+  }, []);
 
-  const getDailyReport = (dateString: string) => {
-    return transactions.filter(t => t.date.startsWith(dateString));
-  };
+  const fetchInventory = useCallback(async (month: string) => {
+    return apiRequest<InventorySnapshot>(`/api/inventory/${encodeURIComponent(month)}`);
+  }, []);
 
-  const getMonthlyReport = (monthString: string) => {
-    return transactions.filter(t => t.issueDate.startsWith(monthString));
-  };
+  const saveInventory = useCallback(async (month: string, input: InventoryInput) => {
+    return apiRequest<InventorySnapshot>(`/api/inventory/${encodeURIComponent(month)}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    });
+  }, []);
+
+  const fetchIssues = useCallback(async (month: string, status?: IssueStatus, cardNo = '') => {
+    return apiRequest<RationIssue[]>(
+      withQuery('/api/issues', {
+        month,
+        status,
+        cardNo,
+      })
+    );
+  }, []);
+
+  const fetchIssueHistory = useCallback(async (cardNo: string) => {
+    return apiRequest<RationIssue[]>(`/api/issues/history/${encodeURIComponent(cardNo)}`);
+  }, []);
+
+  const createIssue = useCallback(async (input: IssueInput) => {
+    return apiRequest<IssueResponse>('/api/issues', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }, []);
+
+  const updateIssue = useCallback(async (id: string, input: IssueInput) => {
+    return apiRequest<IssueResponse>(`/api/issues/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    });
+  }, []);
+
+  const deleteIssue = useCallback(async (id: string) => {
+    await apiRequest<{ success: boolean }>(`/api/issues/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }, []);
+
+  const clearIssuesForMonth = useCallback(async (month: string) => {
+    const response = await apiRequest<{ success: boolean; deletedCount: number }>(
+      `/api/issues/month/${encodeURIComponent(month)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+    return response.deletedCount;
+  }, []);
+
+  const distributeIssue = useCallback(async (id: string) => {
+    return apiRequest<DistributionResponse>(`/api/issues/${encodeURIComponent(id)}/distribute`, {
+      method: 'POST',
+    });
+  }, []);
 
   return (
-    <DataContext.Provider value={{
-      transactions,
-      isOnline,
-      loading,
-      addTransaction,
-      deleteTransaction,
-      bulkDeleteTransactions,
-      getDailyReport,
-      getMonthlyReport
-    }}>
+    <DataContext.Provider
+      value={{
+        user,
+        authLoading,
+        isOnline,
+        login,
+        logout,
+        fetchCardHolders,
+        getCardHolder,
+        createCardHolder,
+        updateCardHolder,
+        fetchInventory,
+        saveInventory,
+        fetchIssues,
+        fetchIssueHistory,
+        createIssue,
+        updateIssue,
+        deleteIssue,
+        clearIssuesForMonth,
+        distributeIssue,
+      }}
+    >
       {children}
     </DataContext.Provider>
   );

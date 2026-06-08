@@ -1,16 +1,32 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { useData } from '../store/DataContext';
 
 const Layout: React.FC = () => {
+  const { user, authLoading } = useData();
+
+  if (authLoading) {
     return (
-        <div style={{ display: 'flex', width: '100%', minHeight: '100vh' }}>
-            <Sidebar />
-            <main style={{ flex: 1, padding: '2rem', marginLeft: '260px' }}>
-                <Outlet />
-            </main>
-        </div>
+      <div className="app-loading">
+        <div className="spinner" />
+        <span>Loading ration shop...</span>
+      </div>
     );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <div className="app-shell">
+      <Sidebar />
+      <main className="app-main">
+        <Outlet />
+      </main>
+    </div>
+  );
 };
 
 export default Layout;

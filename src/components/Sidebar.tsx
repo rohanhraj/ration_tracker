@@ -1,87 +1,82 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Calendar, History, Store, RefreshCw } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  ClipboardCheck,
+  FileText,
+  History,
+  LogOut,
+  Package,
+  ScrollText,
+  Store,
+  Users,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
 import { useData } from '../store/DataContext';
 
+const ownerLinks = [
+  { to: '/inventory', label: 'Inventory', icon: Package },
+  { to: '/issue', label: 'Issue Ration', icon: ScrollText },
+  { to: '/cards', label: 'Card Holders', icon: Users },
+  { to: '/monthly', label: 'Monthly Report', icon: FileText },
+  { to: '/history', label: 'Card History', icon: History },
+];
+
+const workerLinks = [
+  { to: '/distribution', label: 'Distribution', icon: ClipboardCheck },
+];
+
 const Sidebar: React.FC = () => {
-    const { isOnline, loading } = useData();
-    const linkStyle = ({ isActive }: { isActive: boolean }) => ({
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-        padding: '0.75rem 1rem',
-        borderRadius: '8px',
-        color: isActive ? 'var(--accent-neon)' : 'var(--text-secondary)',
-        background: isActive ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
-        textDecoration: 'none',
-        transition: 'var(--transition)',
-        fontWeight: isActive ? 600 : 500,
-        marginBottom: '0.5rem'
-    });
+  const { user, logout, isOnline } = useData();
+  const navigate = useNavigate();
+  const links = user?.role === 'owner' ? ownerLinks : workerLinks;
 
-    return (
-        <aside className="glass-panel" style={{
-            width: '260px',
-            height: 'calc(100vh - 2rem)',
-            position: 'fixed',
-            top: '1rem',
-            left: '1rem',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '1.5rem'
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem' }}>
-                <div style={{
-                    width: '40px', height: '40px', borderRadius: '10px',
-                    background: 'var(--accent-neon)', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', color: '#0f172a'
-                }}>
-                    <Store size={24} />
-                </div>
-                <div>
-                    <h1 style={{ fontSize: '1.1rem', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>Ration Manager</h1>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Govt. Shop Panel</p>
-                </div>
-            </div>
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
-            <nav style={{ flex: 1 }}>
-                <NavLink to="/entry" style={linkStyle}>
-                    <LayoutDashboard size={20} /> Data Entry
-                </NavLink>
-                <NavLink to="/daily" style={linkStyle}>
-                    <Calendar size={20} /> Daily Report
-                </NavLink>
-                <NavLink to="/monthly" style={linkStyle}>
-                    <Calendar size={20} /> Monthly Report
-                </NavLink>
-                <NavLink to="/history" style={linkStyle}>
-                    <History size={20} /> Buyer History
-                </NavLink>
-            </nav>
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-icon">
+          <Store size={22} />
+        </div>
+        <div>
+          <h1>Ration Manager</h1>
+          <p>{user?.role === 'owner' ? 'Shop Owner' : 'Worker'} Panel</p>
+        </div>
+      </div>
 
-            <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--panel-border)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    {loading ? (
-                        <>
-                            <RefreshCw size={14} className="text-neon" style={{ animation: 'spin 1.5s linear infinite' }} />
-                            <span>Syncing...</span>
-                        </>
-                    ) : isOnline ? (
-                        <>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }}></span>
-                            <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Online (Neon DB)</span>
-                        </>
-                    ) : (
-                        <>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }}></span>
-                            <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Offline Mode</span>
-                        </>
-                    )}
-                </div>
-                System v1.0
-            </div>
-        </aside>
-    );
+      <nav className="nav-list">
+        {links.map(link => {
+          const Icon = link.icon;
+          return (
+            <NavLink key={link.to} to={link.to} className="nav-link">
+              <Icon size={19} />
+              <span>{link.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      <div className="sidebar-footer">
+        <div className="session-card">
+          <div>
+            <span className="session-label">Signed in as</span>
+            <strong>{user?.username}</strong>
+          </div>
+          <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}>
+            {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
+          </span>
+        </div>
+        <button className="btn-secondary full-width" type="button" onClick={handleLogout}>
+          <LogOut size={17} />
+          Logout
+        </button>
+      </div>
+    </aside>
+  );
 };
 
 export default Sidebar;
