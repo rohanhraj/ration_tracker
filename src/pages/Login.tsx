@@ -6,8 +6,8 @@ import { useData } from '../store/DataContext';
 
 const Login = () => {
   const { login, user, authLoading } = useData();
-  const [username, setUsername] = useState('mahesh123');
-  const [password, setPassword] = useState('Mahesh@123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -68,11 +68,6 @@ const Login = () => {
             {submitting ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-
-        <div className="login-help">
-          <span>Owner: mahesh123 / Mahesh@123</span>
-          <span>Worker: 123456 / 123456</span>
-        </div>
       </div>
     </div>
   );
