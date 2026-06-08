@@ -430,6 +430,27 @@ input[type='checkbox'] {
   box-shadow: none;
 }
 
+.password-field {
+  padding-right: 4px;
+}
+
+.password-toggle {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .search-wide {
   min-width: min(360px, 100%);
 }

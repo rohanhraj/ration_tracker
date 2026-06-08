@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
-import { LockKeyhole, Store } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, Store } from 'lucide-react';
 import { useData } from '../store/DataContext';
 
 const Login = () => {
   const { login, user, authLoading } = useData();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,13 +55,24 @@ const Login = () => {
           </div>
           <div>
             <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={event => setPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
+            <div className="input-with-icon password-field">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(value => !value)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
           {error && <div className="alert danger">{error}</div>}
           <button className="btn-primary full-width" type="submit" disabled={submitting}>
