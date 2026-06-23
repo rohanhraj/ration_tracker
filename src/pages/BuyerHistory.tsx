@@ -49,9 +49,8 @@ const BuyerHistory = () => {
   const rows = issues.map(issue => ({
     Month: issue.month,
     Status: issue.status,
-    Unit: issue.unit,
-    'Rice kg': issue.riceKg,
-    'Ragi kg': issue.ragiKg,
+    'Rice quantity': issue.riceKg,
+    'Ragi quantity': issue.ragiKg,
     'Issued At': formatDateTime(issue.issuedAt),
     'Distributed At': formatDateTime(issue.distributedAt),
   }));
@@ -66,11 +65,10 @@ const BuyerHistory = () => {
     doc.text(`Card History - ${cardNo}`, 14, 15);
     autoTable(doc, {
       startY: 22,
-      head: [['Month', 'Status', 'Unit', 'Rice kg', 'Ragi kg', 'Issued', 'Distributed']],
+      head: [['Month', 'Status', 'Rice quantity', 'Ragi quantity', 'Issued', 'Distributed']],
       body: issues.map(issue => [
         issue.month,
         issue.status,
-        issue.unit,
         issue.riceKg,
         issue.ragiKg,
         formatDateTime(issue.issuedAt),
@@ -155,9 +153,8 @@ const BuyerHistory = () => {
               <tr>
                 <th>Month</th>
                 <th>Status</th>
-                <th>Unit</th>
-                <th>Rice kg</th>
-                <th>Ragi kg</th>
+                <th>Rice quantity</th>
+                <th>Ragi quantity</th>
                 <th>Issued</th>
                 <th>Distributed</th>
               </tr>
@@ -165,7 +162,7 @@ const BuyerHistory = () => {
             <tbody>
               {issues.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="empty-cell">
+                  <td colSpan={6} className="empty-cell">
                     {loading ? 'Loading history...' : 'No history to show.'}
                   </td>
                 </tr>
@@ -176,7 +173,6 @@ const BuyerHistory = () => {
                     <td>
                       <span className={`status-pill ${issue.status}`}>{issue.status}</span>
                     </td>
-                    <td>{issue.unit}</td>
                     <td>{formatKg(issue.riceKg)}</td>
                     <td>{formatKg(issue.ragiKg)}</td>
                     <td>{formatDateTime(issue.issuedAt)}</td>

@@ -114,9 +114,8 @@ const WorkerDistribution = () => {
             <thead>
               <tr>
                 <th>Card No</th>
-                <th>Unit</th>
-                <th>Rice kg</th>
-                <th>Ragi kg</th>
+                <th>Rice quantity</th>
+                <th>Ragi quantity</th>
                 <th>Issued</th>
                 <th>Approve</th>
               </tr>
@@ -124,7 +123,7 @@ const WorkerDistribution = () => {
             <tbody>
               {filteredIssues.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="empty-cell">
+                  <td colSpan={5} className="empty-cell">
                     {loading ? 'Loading issued cards...' : 'No issued cards pending distribution.'}
                   </td>
                 </tr>
@@ -135,7 +134,6 @@ const WorkerDistribution = () => {
                       <strong>{issue.cardNo}</strong>
                       <span className="muted block">{issue.cardType}</span>
                     </td>
-                    <td>{issue.unit}</td>
                     <td>{formatKg(issue.riceKg)}</td>
                     <td>{formatKg(issue.ragiKg)}</td>
                     <td>{formatDateTime(issue.issuedAt)}</td>

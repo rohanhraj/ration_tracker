@@ -69,9 +69,8 @@ const MonthlyReport = () => {
   const reportRows = filteredIssues.map(issue => ({
     'Card No': issue.cardNo,
     Status: issue.status,
-    Unit: issue.unit,
-    'Rice kg': issue.riceKg,
-    'Ragi kg': issue.ragiKg,
+    'Rice quantity': issue.riceKg,
+    'Ragi quantity': issue.ragiKg,
     'Issued At': formatDateTime(issue.issuedAt),
     'Distributed At': formatDateTime(issue.distributedAt),
   }));
@@ -86,11 +85,10 @@ const MonthlyReport = () => {
     doc.text(`Monthly Ration Report - ${month}`, 14, 15);
     autoTable(doc, {
       startY: 22,
-      head: [['Card No', 'Status', 'Unit', 'Rice kg', 'Ragi kg', 'Issued', 'Distributed']],
+      head: [['Card No', 'Status', 'Rice quantity', 'Ragi quantity', 'Issued', 'Distributed']],
       body: filteredIssues.map(issue => [
         issue.cardNo,
         issue.status,
-        issue.unit,
         issue.riceKg,
         issue.ragiKg,
         formatDateTime(issue.issuedAt),
@@ -213,9 +211,8 @@ const MonthlyReport = () => {
               <tr>
                 <th>Card No</th>
                 <th>Status</th>
-                <th>Unit</th>
-                <th>Rice kg</th>
-                <th>Ragi kg</th>
+                <th>Rice quantity</th>
+                <th>Ragi quantity</th>
                 <th>Issued</th>
                 <th>Distributed</th>
               </tr>
@@ -223,7 +220,7 @@ const MonthlyReport = () => {
             <tbody>
               {filteredIssues.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="empty-cell">
+                  <td colSpan={6} className="empty-cell">
                     {loading ? 'Loading report...' : 'No records found.'}
                   </td>
                 </tr>
@@ -237,7 +234,6 @@ const MonthlyReport = () => {
                     <td>
                       <span className={`status-pill ${issue.status}`}>{issue.status}</span>
                     </td>
-                    <td>{issue.unit}</td>
                     <td>{formatKg(issue.riceKg)}</td>
                     <td>{formatKg(issue.ragiKg)}</td>
                     <td>{formatDateTime(issue.issuedAt)}</td>

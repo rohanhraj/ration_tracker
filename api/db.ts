@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { shouldShowCardHolder } from '../src/utils/rationRules.js';
 
 dotenv.config();
 
@@ -38,7 +39,9 @@ const seedCardHolders = async (client: pg.PoolClient) => {
     }
     throw err;
   }
-  const cards = JSON.parse(rawSeed) as CardSeed[];
+  const cards = (JSON.parse(rawSeed) as CardSeed[]).filter(card =>
+    shouldShowCardHolder({ cardType: card.cardType })
+  );
 
   const chunkSize = 500;
   for (let start = 0; start < cards.length; start += chunkSize) {

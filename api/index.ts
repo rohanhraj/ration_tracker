@@ -3,6 +3,7 @@ import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import { pool, initDb } from './db.js';
+import { isReferenceCardType } from '../src/utils/rationRules.js';
 
 const app = express();
 app.use(cors());
@@ -26,6 +27,7 @@ type AuthenticatedRequest = Request & {
 const SESSION_COOKIE = 'ration_session';
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'local-ration-shop-session-secret';
+const NON_REFERENCE_CARD_TYPE_SQL = "COALESCE(card_type, '') NOT ILIKE '%NPHH%'";
 
 const users: Array<SessionUser & { password: string }> = [
   {
@@ -254,6 +256,8 @@ app.get('/api/card-holders', requireAuth, requireRole('owner'), async (req: Auth
   const params: unknown[] = [];
   const where: string[] = [];
 
+  where.push(NON_REFERENCE_CARD_TYPE_SQL);
+
   if (search) {
     params.push(`%${search}%`);
     where.push(`(card_no ILIKE $${params.length} OR COALESCE(card_type, '') ILIKE $${params.length})`);
@@ -285,9 +289,10 @@ app.get('/api/card-holders', requireAuth, requireRole('owner'), async (req: Auth
 app.get('/api/card-holders/:cardNo', requireAuth, requireRole('owner'), async (req, res) => {
   const cardNo = getRouteParam(req.params.cardNo);
   try {
-    const result = await pool.query('SELECT * FROM card_holders WHERE card_no = $1', [
-      cardNo,
-    ]);
+    const result = await pool.query(
+      `SELECT * FROM card_holders WHERE card_no = $1 AND ${NON_REFERENCE_CARD_TYPE_SQL}`,
+      [cardNo]
+    );
 
     if (result.rowCount === 0) {
       res.status(404).json({ error: 'Card holder not found' });
@@ -307,6 +312,10 @@ app.post('/api/card-holders', requireAuth, requireRole('owner'), async (req, res
 
   if (!cardNo || !/^\d{6,20}$/.test(String(cardNo))) {
     res.status(400).json({ error: 'A valid card number is required' });
+    return;
+  }
+  if (isReferenceCardType(cardType)) {
+    res.status(400).json({ error: 'NPHH reference card types are not used' });
     return;
   }
 
@@ -338,6 +347,10 @@ app.put('/api/card-holders/:cardNo', requireAuth, requireRole('owner'), async (r
 
   if (!/^\d{6,20}$/.test(nextCardNo)) {
     res.status(400).json({ error: 'A valid card number is required' });
+    return;
+  }
+  if (isReferenceCardType(cardType)) {
+    res.status(400).json({ error: 'NPHH reference card types are not used' });
     return;
   }
 
@@ -476,8 +489,7 @@ app.get('/api/issues', requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 app.post('/api/issues', requireAuth, requireRole('owner'), async (req: AuthenticatedRequest, res) => {
-  const { cardNo, month, unit, riceKg, ragiKg } = req.body;
-  const parsedUnit = parseNumber(unit);
+  const { cardNo, month, riceKg, ragiKg } = req.body;
   const parsedRice = parseNumber(riceKg);
   const parsedRagi = parseNumber(ragiKg);
 
@@ -486,24 +498,28 @@ app.post('/api/issues', requireAuth, requireRole('owner'), async (req: Authentic
     return;
   }
   if (
-    !Number.isFinite(parsedUnit) ||
     !Number.isFinite(parsedRice) ||
     !Number.isFinite(parsedRagi) ||
-    parsedUnit < 0 ||
     parsedRice < 0 ||
     parsedRagi < 0
   ) {
-    res.status(400).json({ error: 'Unit, rice kg, and ragi kg must be zero or greater' });
+    res.status(400).json({ error: 'Rice and ragi quantities must be zero or greater' });
     return;
   }
   if (parsedRice === 0 && parsedRagi === 0) {
-    res.status(400).json({ error: 'Enter rice kg or ragi kg before issuing ration' });
+    res.status(400).json({ error: 'Enter rice or ragi quantity before issuing ration' });
     return;
   }
 
   try {
     const cardResult = await pool.query(
-      'SELECT card_no FROM card_holders WHERE card_no = $1 AND is_active = TRUE',
+      `
+        SELECT card_no
+        FROM card_holders
+        WHERE card_no = $1
+          AND is_active = TRUE
+          AND ${NON_REFERENCE_CARD_TYPE_SQL}
+      `,
       [cardNo]
     );
     if (cardResult.rowCount === 0) {
@@ -532,7 +548,7 @@ app.post('/api/issues', requireAuth, requireRole('owner'), async (req: Authentic
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
       `,
-      [id, cardNo, month, parsedUnit, parsedRice, parsedRagi, req.user?.username || 'owner']
+      [id, cardNo, month, 0, parsedRice, parsedRagi, req.user?.username || 'owner']
     );
 
     const issueResult = await pool.query(
@@ -560,8 +576,7 @@ app.post('/api/issues', requireAuth, requireRole('owner'), async (req: Authentic
 
 app.put('/api/issues/:id', requireAuth, requireRole('owner'), async (req, res) => {
   const issueId = getRouteParam(req.params.id);
-  const { cardNo, month, unit, riceKg, ragiKg } = req.body;
-  const parsedUnit = parseNumber(unit);
+  const { cardNo, month, riceKg, ragiKg } = req.body;
   const parsedRice = parseNumber(riceKg);
   const parsedRagi = parseNumber(ragiKg);
 
@@ -570,18 +585,31 @@ app.put('/api/issues/:id', requireAuth, requireRole('owner'), async (req, res) =
     return;
   }
   if (
-    !Number.isFinite(parsedUnit) ||
     !Number.isFinite(parsedRice) ||
     !Number.isFinite(parsedRagi) ||
-    parsedUnit < 0 ||
     parsedRice < 0 ||
     parsedRagi < 0
   ) {
-    res.status(400).json({ error: 'Unit, rice kg, and ragi kg must be zero or greater' });
+    res.status(400).json({ error: 'Rice and ragi quantities must be zero or greater' });
     return;
   }
 
   try {
+    const cardResult = await pool.query(
+      `
+        SELECT card_no
+        FROM card_holders
+        WHERE card_no = $1
+          AND is_active = TRUE
+          AND ${NON_REFERENCE_CARD_TYPE_SQL}
+      `,
+      [cardNo]
+    );
+    if (cardResult.rowCount === 0) {
+      res.status(404).json({ error: 'Active card holder not found' });
+      return;
+    }
+
     const duplicateResult = await pool.query(
       `
         SELECT COUNT(*) AS count
@@ -605,7 +633,7 @@ app.put('/api/issues/:id', requireAuth, requireRole('owner'), async (req, res) =
         WHERE id = $6 AND status = 'issued'
         RETURNING *
       `,
-      [cardNo, month, parsedUnit, parsedRice, parsedRagi, issueId]
+      [cardNo, month, 0, parsedRice, parsedRagi, issueId]
     );
 
     if (result.rowCount === 0) {

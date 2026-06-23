@@ -43,7 +43,6 @@ export interface RationIssue {
 export interface IssueInput {
   cardNo: string;
   month: string;
-  unit: number;
   riceKg: number;
   ragiKg: number;
 }

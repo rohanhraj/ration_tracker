@@ -4,11 +4,11 @@ import { AlertCircle, Edit2, PlusCircle, Search, Trash2 } from 'lucide-react';
 import { useData } from '../store/DataContext';
 import type { CardHolder, IssueInput, RationIssue } from '../store/DataContext';
 import { formatDateTime, formatKg, getCurrentMonth } from '../utils/format';
+import { ISSUE_QUANTITY_FIELDS } from '../utils/rationRules';
 
 const emptyIssueInput = (month: string): IssueInput => ({
   cardNo: '',
   month,
-  unit: 0,
   riceKg: 0,
   ragiKg: 0,
 });
@@ -112,7 +112,6 @@ const IssueRation = () => {
     setForm({
       cardNo: issue.cardNo,
       month: issue.month,
-      unit: issue.unit,
       riceKg: issue.riceKg,
       ragiKg: issue.ragiKg,
     });
@@ -173,7 +172,7 @@ const IssueRation = () => {
       <section className="panel">
         <div className="section-title">
           <h3>{editingId ? 'Edit Issued Card' : 'New Issue'}</h3>
-          <p>Unit, rice kg, and ragi kg are separate entries.</p>
+          <p>Enter rice and ragi quantities for this card.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="issue-layout">
@@ -206,43 +205,21 @@ const IssueRation = () => {
             {loadingCards && <span className="field-note">Searching cards...</span>}
           </div>
 
-          <div>
-            <label>Unit</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.unit}
-              onChange={event => setForm(current => ({ ...current, unit: Number(event.target.value) }))}
-              required
-            />
-          </div>
-          <div>
-            <label>Rice kg</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.riceKg}
-              onChange={event =>
-                setForm(current => ({ ...current, riceKg: Number(event.target.value) }))
-              }
-              required
-            />
-          </div>
-          <div>
-            <label>Ragi kg</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.ragiKg}
-              onChange={event =>
-                setForm(current => ({ ...current, ragiKg: Number(event.target.value) }))
-              }
-              required
-            />
-          </div>
+          {ISSUE_QUANTITY_FIELDS.map(field => (
+            <div key={field.key}>
+              <label>{field.label}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form[field.key]}
+                onChange={event =>
+                  setForm(current => ({ ...current, [field.key]: Number(event.target.value) }))
+                }
+                required
+              />
+            </div>
+          ))}
 
           <div className="form-actions">
             {editingId && (
@@ -299,9 +276,8 @@ const IssueRation = () => {
               <tr>
                 <th>Card No</th>
                 <th>Status</th>
-                <th>Unit</th>
-                <th>Rice kg</th>
-                <th>Ragi kg</th>
+                <th>Rice quantity</th>
+                <th>Ragi quantity</th>
                 <th>Issued</th>
                 <th></th>
               </tr>
@@ -309,7 +285,7 @@ const IssueRation = () => {
             <tbody>
               {issues.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="empty-cell">
+                  <td colSpan={6} className="empty-cell">
                     No ration issued for this month yet.
                   </td>
                 </tr>
@@ -323,7 +299,6 @@ const IssueRation = () => {
                     <td>
                       <span className={`status-pill ${issue.status}`}>{issue.status}</span>
                     </td>
-                    <td>{issue.unit}</td>
                     <td>{formatKg(issue.riceKg)}</td>
                     <td>{formatKg(issue.ragiKg)}</td>
                     <td>{formatDateTime(issue.issuedAt)}</td>
